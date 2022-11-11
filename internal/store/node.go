@@ -28,6 +28,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	clientset "k8s.io/client-go/kubernetes"
@@ -464,11 +465,19 @@ func wrapNodeFunc(f func(*v1.Node) *metric.Family) func(interface{}) *metric.Fam
 }
 
 func createNodeListWatch(kubeClient clientset.Interface, ns string, fieldSelector string) cache.ListerWatcher {
+	nodeSelector, _ := fields.ParseAndTransformSelector(fieldSelector, func(field, value string) (string, string, error) {
+		if field == "spec.nodeName" {
+			field = "metadata.name"
+		}
+		return field, value, nil
+	})
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
+			opts.FieldSelector = nodeSelector.String()
 			return kubeClient.CoreV1().Nodes().List(context.TODO(), opts)
 		},
 		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
+			opts.FieldSelector = nodeSelector.String()
 			return kubeClient.CoreV1().Nodes().Watch(context.TODO(), opts)
 		},
 	}
